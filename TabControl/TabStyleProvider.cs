@@ -475,7 +475,7 @@ namespace System.Windows.Forms
 
 		internal bool ShouldDrawTabCloser(int index) {
 			var controls = _TabControl.TabPages[index].Controls;
-			return controls.Count <= 0 || controls[0] is ITabContent c == false || c.CanClose != false;
+			return controls.Count <= 0 || controls[0] is ITabContent c == false || c.CanClose;
 		}
 
 		protected virtual void DrawTabCloser(int index, Graphics graphics) {
