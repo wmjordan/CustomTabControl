@@ -11,7 +11,7 @@ using System.Windows.Forms;
 
 namespace System.Windows.Forms
 {
-	[System.ComponentModel.ToolboxItem(false)]
+	[ToolboxItem(false)]
 	public abstract class TabStyleProvider : Component
 	{
 		#region Constructor
@@ -501,9 +501,9 @@ namespace System.Windows.Forms
 
 		private void DrawTabFocusIndicator(GraphicsPath tabpath, int index, Graphics graphics) {
 			if (_FocusTrack && _TabControl.Focused && index == _TabControl.SelectedIndex) {
-				Brush focusBrush = null;
 				RectangleF pathRect = tabpath.GetBounds();
-				Rectangle focusRect = Rectangle.Empty;
+				Rectangle focusRect;
+				LinearGradientBrush focusBrush;
 				switch (_TabControl.Alignment) {
 					case TabAlignment.Top:
 						focusRect = new Rectangle((int)pathRect.X, (int)pathRect.Y, (int)pathRect.Width, 4);
@@ -521,14 +521,16 @@ namespace System.Windows.Forms
 						focusRect = new Rectangle((int)pathRect.Right - 4, (int)pathRect.Y, 4, (int)pathRect.Height);
 						focusBrush = new LinearGradientBrush(focusRect, SystemColors.ControlLight, _FocusColor, LinearGradientMode.Horizontal);
 						break;
+					default:
+						goto case TabAlignment.Top;
 				}
 
 				//	Ensure the focus stip does not go outside the tab
-				Region focusRegion = new Region(focusRect);
-				focusRegion.Intersect(tabpath);
-				graphics.FillRegion(focusBrush, focusRegion);
-				focusRegion.Dispose();
-				focusBrush.Dispose();
+				using (focusBrush)
+				using (Region focusRegion = new Region(focusRect)) {
+					focusRegion.Intersect(tabpath);
+					graphics.FillRegion(focusBrush, focusRegion);
+				}
 			}
 		}
 
@@ -537,29 +539,18 @@ namespace System.Windows.Forms
 		#region Background brushes
 
 		private Blend GetBackgroundBlend() {
-			float[] relativeIntensities = new float[] { 0f, 0.7f, 1f };
-			float[] relativePositions = new float[] { 0f, 0.6f, 1f };
-
-			//	Glass look to top aligned tabs
-			if (_TabControl.Alignment == TabAlignment.Top) {
-				relativeIntensities = new float[] { 0f, 0.5f, 1f, 1f };
-				relativePositions = new float[] { 0f, 0.5f, 0.51f, 1f };
-			}
-
-			Blend blend = new Blend();
-			blend.Factors = relativeIntensities;
-			blend.Positions = relativePositions;
-
-			return blend;
+			return _TabControl.Alignment == TabAlignment.Top ? new Blend {
+				Factors = new float[] { 0f, 0.5f, 1f, 1f },
+				Positions = new float[] { 0f, 0.5f, 0.51f, 1f }
+			} : new Blend {
+				Factors = new float[] { 0f, 0.7f, 1f },
+				Positions = new float[] { 0f, 0.6f, 1f }
+			};
 		}
 
 		public virtual Brush GetPageBackgroundBrush(int index) {
-			//	Capture the colours dependant on selection state of the tab
-			Color light = Color.FromArgb(242, 242, 242);
-			if (_TabControl.Alignment == TabAlignment.Top) {
-				light = Color.FromArgb(207, 207, 207);
-			}
-
+			//	Capture the colors dependent on selection state of the tab
+			Color light;
 			if (_TabControl.SelectedIndex == index) {
 				light = SystemColors.Window;
 			}
@@ -569,6 +560,12 @@ namespace System.Windows.Forms
 			else if (_HotTrack && index == _TabControl.ActiveIndex) {
 				//	Enable hot tracking
 				light = Color.FromArgb(234, 246, 253);
+			}
+			else if (_TabControl.Alignment == TabAlignment.Top) {
+				light = Color.FromArgb(207, 207, 207);
+			}
+			else {
+				light = Color.FromArgb(242, 242, 242);
 			}
 
 			return new SolidBrush(light);
