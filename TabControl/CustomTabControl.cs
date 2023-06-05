@@ -811,7 +811,7 @@ namespace System.Windows.Forms
 
 		void DrawTabText(int index, Graphics graphics) {
 			graphics.SmoothingMode = SmoothingMode.HighQuality;
-			graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+			graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 			RectangleF tabBounds = GetTabTextRect(index);
 			bool selected = SelectedIndex == index;
 			TabPage activeTab = TabPages[index];
