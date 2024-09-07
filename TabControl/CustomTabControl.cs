@@ -207,7 +207,7 @@ namespace System.Windows.Forms
 			get {
 				NativeMethods.TCHITTESTINFO hitTestInfo = new NativeMethods.TCHITTESTINFO(PointToClient(Control.MousePosition));
 				int index = NativeMethods.SendMessage(Handle, NativeMethods.TCM_HITTEST, IntPtr.Zero, NativeMethods.ToIntPtr(hitTestInfo)).ToInt32();
-				return index == -1 || TabPages[index].Enabled == false ? -1 : index;
+				return index == -1 || index >= TabCount || TabPages[index].Enabled == false ? -1 : index;
 			}
 		}
 
@@ -359,7 +359,7 @@ namespace System.Windows.Forms
 				}
 
 				//	Capture insert point and adjust for removal of tab
-				//	We cannot assess this after removal as differeing tab sizes will cause
+				//	We cannot assess this after removal as differing tab sizes will cause
 				//	inaccuracies in the activeTab at insert point.
 				int insertPoint = ActiveIndex;
 				if (dragTab.Parent.Equals(this) && TabPages.IndexOf(dragTab) < insertPoint) {
@@ -370,15 +370,18 @@ namespace System.Windows.Forms
 				}
 
 				_LockUi = true;
+				try {
+					//	Remove from current position (could be another tabControl)
+					((TabControl)dragTab.Parent).TabPages.Remove(dragTab);
 
-				//	Remove from current position (could be another tabcontrol)
-				((TabControl)dragTab.Parent).TabPages.Remove(dragTab);
+					//	Add to current position
+					TabPages.Insert(insertPoint, dragTab);
+					SelectedTab = dragTab;
+				}
+				finally {
+					_LockUi = false;
+				}
 
-				//	Add to current position
-				TabPages.Insert(insertPoint, dragTab);
-				SelectedTab = dragTab;
-
-				_LockUi = false;
 				Invalidate();
 
 				//	deal with hidden tab handling?
@@ -656,86 +659,88 @@ namespace System.Windows.Forms
 
 			//	Buffer code from Gil. Schmidt http://www.codeproject.com/KB/graphics/DoubleBuffering.aspx
 
-			if (Width > 0 && Height > 0) {
-				if (_BackImage == null) {
-					//	Cached Background Image
-					_BackImage = new Bitmap(Width, Height);
-					Graphics backGraphics = Graphics.FromImage(_BackImage);
-					backGraphics.Clear(Color.Transparent);
-					PaintTransparentBackground(backGraphics, ClientRectangle);
+			if (Width == 0 || Height == 0 || _LockUi) {
+				return;
+			}
+
+			if (_BackImage == null) {
+				//	Cached Background Image
+				_BackImage = new Bitmap(Width, Height);
+				Graphics backGraphics = Graphics.FromImage(_BackImage);
+				backGraphics.Clear(Color.Transparent);
+				PaintTransparentBackground(backGraphics, ClientRectangle);
+			}
+
+			_BackBufferGraphics.Clear(Color.Transparent);
+			_BackBufferGraphics.DrawImageUnscaled(_BackImage, 0, 0);
+
+			_TabBufferGraphics.Clear(Color.Transparent);
+
+			if (TabCount > 0) {
+				//	When top or bottom and scrollable we need to clip the sides from painting the tabs.
+				//	Left and right are always multiline.
+				if (Alignment <= TabAlignment.Bottom && !Multiline) {
+					_TabBufferGraphics.Clip = new Region(new RectangleF(ClientRectangle.X + 3, ClientRectangle.Y, ClientRectangle.Width - 6, ClientRectangle.Height));
 				}
 
-				_BackBufferGraphics.Clear(Color.Transparent);
-				_BackBufferGraphics.DrawImageUnscaled(_BackImage, 0, 0);
-
-				_TabBufferGraphics.Clear(Color.Transparent);
-
-				if (TabCount > 0) {
-					//	When top or bottom and scrollable we need to clip the sides from painting the tabs.
-					//	Left and right are always multiline.
-					if (Alignment <= TabAlignment.Bottom && !Multiline) {
-						_TabBufferGraphics.Clip = new Region(new RectangleF(ClientRectangle.X + 3, ClientRectangle.Y, ClientRectangle.Width - 6, ClientRectangle.Height));
-					}
-
-					//	Draw each tabpage from right to left.  We do it this way to handle
-					//	the overlap correctly.
-					if (Multiline) {
-						for (int row = 0; row < RowCount; row++) {
-							for (int index = TabCount - 1; index >= 0; index--) {
-								if (index != SelectedIndex && (RowCount == 1 || GetTabRow(index) == row)) {
-									DrawTabPage(index, _TabBufferGraphics);
-								}
-							}
-						}
-					}
-					else {
+				//	Draw each tabpage from right to left.  We do it this way to handle
+				//	the overlap correctly.
+				if (Multiline) {
+					for (int row = 0; row < RowCount; row++) {
 						for (int index = TabCount - 1; index >= 0; index--) {
-							if (index != SelectedIndex) {
+							if (index != SelectedIndex && (RowCount == 1 || GetTabRow(index) == row)) {
 								DrawTabPage(index, _TabBufferGraphics);
 							}
 						}
 					}
-
-					//	The selected tab must be drawn last so it appears on top.
-					if (SelectedIndex > -1) {
-						DrawTabPage(SelectedIndex, _TabBufferGraphics);
-					}
-				}
-				_TabBufferGraphics.Flush();
-
-				//	Paint the tabs on top of the background
-
-				// Create a new color matrix and set the alpha value to 0.5
-				ColorMatrix alphaMatrix = new ColorMatrix();
-				alphaMatrix.Matrix00 = alphaMatrix.Matrix11 = alphaMatrix.Matrix22 = alphaMatrix.Matrix44 = 1;
-				alphaMatrix.Matrix33 = _StyleProvider.Opacity;
-
-				// Create a new image attribute object and set the color matrix to
-				// the one just created
-				using (ImageAttributes alphaAttributes = new ImageAttributes()) {
-					alphaAttributes.SetColorMatrix(alphaMatrix);
-
-					// Draw the original image with the image attributes specified
-					_BackBufferGraphics.DrawImage(_TabBuffer,
-													   new Rectangle(0, 0, _TabBuffer.Width, _TabBuffer.Height),
-													   0, 0, _TabBuffer.Width, _TabBuffer.Height, GraphicsUnit.Pixel,
-													   alphaAttributes);
-				}
-
-				_BackBufferGraphics.Flush();
-
-				//	Now paint this to the screen
-
-				//	We want to paint the whole tabstrip and border every time
-				//	so that the hot areas update correctly, along with any overlaps
-
-				//	paint the tabs etc.
-				if (RightToLeftLayout) {
-					screenGraphics.DrawImageUnscaled(_BackBuffer, -1, 0);
 				}
 				else {
-					screenGraphics.DrawImageUnscaled(_BackBuffer, 0, 0);
+					for (int index = TabCount - 1; index >= 0; index--) {
+						if (index != SelectedIndex) {
+							DrawTabPage(index, _TabBufferGraphics);
+						}
+					}
 				}
+
+				//	The selected tab must be drawn last so it appears on top.
+				if (SelectedIndex > -1 && SelectedIndex < TabCount) {
+					DrawTabPage(SelectedIndex, _TabBufferGraphics);
+				}
+			}
+			_TabBufferGraphics.Flush();
+
+			//	Paint the tabs on top of the background
+
+			// Create a new color matrix and set the alpha value to 0.5
+			ColorMatrix alphaMatrix = new ColorMatrix();
+			alphaMatrix.Matrix00 = alphaMatrix.Matrix11 = alphaMatrix.Matrix22 = alphaMatrix.Matrix44 = 1;
+			alphaMatrix.Matrix33 = _StyleProvider.Opacity;
+
+			// Create a new image attribute object and set the color matrix to
+			// the one just created
+			using (ImageAttributes alphaAttributes = new ImageAttributes()) {
+				alphaAttributes.SetColorMatrix(alphaMatrix);
+
+				// Draw the original image with the image attributes specified
+				_BackBufferGraphics.DrawImage(_TabBuffer,
+												   new Rectangle(0, 0, _TabBuffer.Width, _TabBuffer.Height),
+												   0, 0, _TabBuffer.Width, _TabBuffer.Height, GraphicsUnit.Pixel,
+												   alphaAttributes);
+			}
+
+			_BackBufferGraphics.Flush();
+
+			//	Now paint this to the screen
+
+			//	We want to paint the whole tabstrip and border every time
+			//	so that the hot areas update correctly, along with any overlaps
+
+			//	paint the tabs etc.
+			if (RightToLeftLayout) {
+				screenGraphics.DrawImageUnscaled(_BackBuffer, -1, 0);
+			}
+			else {
+				screenGraphics.DrawImageUnscaled(_BackBuffer, 0, 0);
 			}
 		}
 
