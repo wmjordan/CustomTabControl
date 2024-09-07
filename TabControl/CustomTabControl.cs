@@ -347,12 +347,12 @@ namespace System.Windows.Forms
 			}
 		}
 
-		protected override void OnDragDrop(DragEventArgs drgevent) {
-			base.OnDragDrop(drgevent);
-			if (drgevent.Data.GetDataPresent(typeof(TabPage))) {
-				drgevent.Effect = DragDropEffects.Move;
+		protected override void OnDragDrop(DragEventArgs arg) {
+			base.OnDragDrop(arg);
+			if (arg.Data.GetDataPresent(typeof(TabPage))) {
+				arg.Effect = DragDropEffects.Move;
 
-				TabPage dragTab = (TabPage)drgevent.Data.GetData(typeof(TabPage));
+				TabPage dragTab = (TabPage)arg.Data.GetData(typeof(TabPage));
 
 				if (ActiveTab == dragTab) {
 					return;
@@ -362,7 +362,7 @@ namespace System.Windows.Forms
 				//	We cannot assess this after removal as differing tab sizes will cause
 				//	inaccuracies in the activeTab at insert point.
 				int insertPoint = ActiveIndex;
-				if (dragTab.Parent.Equals(this) && TabPages.IndexOf(dragTab) < insertPoint) {
+				if (dragTab.Parent.Equals(this) && TabPages.IndexOf(dragTab) + 1 < insertPoint) {
 					insertPoint--;
 				}
 				if (insertPoint < 0) {
